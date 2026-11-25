@@ -1,0 +1,58 @@
+name: NsonEngine
+
+on:
+  # Runs every day at 06:00 UTC (01:00 EST).
+  schedule:
+    - cron: '0 6 * * *'
+  push:
+    branches: [master]
+    paths:
+      - Nsonengine1 2 3 AI.cpp
+      - Nsonengine1 2 3 AI.vcxproj
+      - scripts/nson-check.sh
+      - .github/workflows/nson.yml
+  pull_request:
+    branches: [master]
+    paths:
+      - Nsonengine1 2 3 AI.cpp
+      - Nsonengine1 2 3 AI.vcxproj
+      - scripts/nson-check.sh
+      - .github/workflows/nson.yml
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build project (Debug x64)
+        run: msbuild "Nsonengine1 2 3 AI.vcxproj" /p:Configuration=Debug /p:Platform=x64
+
+      - name: Run smoke test
+        shell: powershell
+        run: |
+          $exe = "x64\Debug\Nsonengine1 2 3 AI.exe"
+          if (-not (Test-Path $exe)) { throw "Executable missing: $exe" }
+          Set-Content -Path smoke-input.txt -Value "2","TestProj","3","testscript","4","testpage","6","0"
+          cmd /c "`"$exe`" < smoke-input.txt > smoke-output.txt"
+          $exitCode = $LASTEXITCODE
+          $output = Get-Content smoke-output.txt -Raw
+          Write-Output $output
+          if ($exitCode -ne 0) { throw "Executable exited with code $exitCode" }
+          if (-not ($output -match "NSON ENGINE")) { throw "Missing NSON ENGINE banner in output" }
+          if (-not ($output -match "C\+\+ project generated successfully")) { throw "Missing C++ project generation in output" }
+          if (-not ($output -match "Python file generated successfully")) { throw "Missing Python generation in output" }
+          if (-not ($output -match "HTML page generated successfully")) { throw "Missing HTML generation in output" }
+          if (-not ($output -match "NsonEngine shutting down")) { throw "Missing clean shutdown in output" }
+          if (-not (Test-Path "NsonOutput\TestProj\main.cpp")) { throw "Missing generated file NsonOutput\TestProj\main.cpp" }
+          if (-not (Test-Path "NsonOutput\TestProj\CMakeLists.txt")) { throw "Missing generated file NsonOutput\TestProj\CMakeLists.txt" }
+          if (-not (Test-Path "NsonOutput\testscript.py")) { throw "Missing generated file NsonOutput\testscript.py" }
+          if (-not (Test-Path "NsonOutput\testpage.html")) { throw "Missing generated file NsonOutput\testpage.html" }
+          cmake -S NsonOutput\TestProj -B NsonOutput\TestProj\build
+          cmake --build NsonOutput\TestProj\build --config Debug
+          $genOut = & "NsonOutput\TestProj\build\Debug\TestProj.exe" 2>&1
+          if (-not ($genOut -match "Hello from NsonEngine generated code!")) { throw "Generated project did not print its greeting" }
+          Write-Output "Test passed: NsonEngine.exe ran, exited 0, generated a C++ project, a Python script and an HTML page, and the generated project builds and runs."
